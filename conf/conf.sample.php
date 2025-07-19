@@ -197,6 +197,8 @@ $CONNECTOR["openai"]["API_KEY"]=""; //API key.
 $CONNECTOR["openai"]["MAX_TOKENS_MEMORY"]="1024"; //Maximum tokens to generate when summarizing.
 //Player2 JSON
 $CONNECTOR["player2json"]["url"]="https://api.player2.ai/v1/chat/completions"; //API endpoint.
+//Player2 Local (Example for local/network deployment)
+$CONNECTOR["player2local"]["url"]="http://127.0.0.1:8080/v1/chat/completions"; //Local Player2 API endpoint - will be auto-replaced with detected IP.
 //Google OpenAI JSON
 $CONNECTOR["google_openaijson"]["url"]="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"; //API endpoint.
 $CONNECTOR["google_openaijson"]["model"]='gemini-1.5-flash'; //LLM model.
@@ -273,7 +275,7 @@ $TTS["MIMIC3"]["voice"]="en_UK/apope_low#default"; //Voice ID.
 $TTS["MIMIC3"]["rate"]="1"; //Speech speed.
 $TTS["MIMIC3"]["volume"]="60"; //Speech volume.
 //xVASynth
-$TTS["XVASYNTH"]["url"]='http://192.168.0.1:8008';	//xVASynth must be run in same machine as DwemerDistro, so this must be http://your-local-ip:8008
+$TTS["XVASYNTH"]["url"]='http://localhost:8008';	//xVASynth must be run in same machine as DwemerDistro, so this must be http://your-local-ip:8008
 $TTS["XVASYNTH"]["base_lang"]='en';	//Base language.
 $TTS["XVASYNTH"]["modelType"]='xVAPitch'; //ModelType.
 $TTS["XVASYNTH"]["version"]='3.0'; //Version.
@@ -448,5 +450,7 @@ $FEATURES["MISC"]["LIFE_LINK_PLUGIN"]=false; // WIP. Use life link plugin for dy
 
 $BORED_EVENT_SERVERSIDE=false;
 $RECHAT_ALLOW_ACTIONS=false;
+
+//[Network IP Auto-Detection] - Automatically detects WSL2/Host IPs and replaces localhost addresses on startup.
 
 ?>
