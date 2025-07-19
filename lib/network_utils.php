@@ -1,9 +1,8 @@
 <?php
 
 /**
- * Simple Network IP Detection and Replacement
- * Detects WSL2 and Host IPs on startup and replaces localhost addresses automatically
- * Only affects services that run on the Windows host (not WSL2 services)
+ * Simple Network IP Detection
+ * Detects WSL2 and Host IPs on startup and stores them in the database
  */
 
 class NetworkUtils {
@@ -73,25 +72,17 @@ class NetworkUtils {
     }
     
     /**
-     * Replace localhost/127.0.0.1 addresses in a URL with the host IP
-     * @param string $url The original URL
-     * @param string $hostIP The host IP to use for replacement
-     * @return string The URL with replaced IP
+     * Detect and store network IPs in the database on startup
      */
-    public static function replaceLocalhostInURL($url, $hostIP) {
-        if (empty($url) || empty($hostIP)) {
-            return $url;
+    public static function detectAndStoreIPs() {
+        // Make sure we have database access
+        if (!isset($GLOBALS['db'])) {
+            error_log("Network Detection: Database not available");
+            return;
         }
         
-        // Replace localhost and 127.0.0.1 with host IP
-        return preg_replace('/(?:localhost|127\.0\.0\.1)/', $hostIP, $url);
-    }
-    
-    /**
-     * Apply IP replacement to specific connector configurations on startup
-     * Only affects services that run on the Windows host, not WSL2 services
-     */
-    public static function replaceLocalhostOnStartup() {
+        $db = $GLOBALS['db'];
+        
         // Detect IPs
         $wslIP = self::getWSL2IP();
         $hostIP = self::getHostIP();
@@ -99,94 +90,81 @@ class NetworkUtils {
         // Log detected IPs
         error_log("Network Detection - WSL2 IP: " . ($wslIP ?: 'N/A') . ", Host IP: " . ($hostIP ?: 'N/A'));
         
-        // Use host IP for Windows-based services
-        if (!$hostIP) {
-            error_log("Network Detection: No host IP found for Windows services replacement");
-            return;
-        }
-        
-        $replacementCount = 0;
-        
-        // Define which services run on Windows host (not WSL2)
-        $windowsHostServices = [
-            'CONNECTOR' => ['player2json', 'player2local', 'player2'],  // Player2 runs on Windows
-            'TTS' => ['XVASYNTH'],  // xVASynth runs on Windows
-            'STT' => [],  // Add any STT services that run on Windows here
-            'ITT' => []   // Add any ITT services that run on Windows here
-        ];
-        
-        // Replace in specific CONNECTOR configurations
-        if (isset($GLOBALS['CONNECTOR']) && is_array($GLOBALS['CONNECTOR'])) {
-            foreach ($windowsHostServices['CONNECTOR'] as $connectorName) {
-                if (isset($GLOBALS['CONNECTOR'][$connectorName]) && is_array($GLOBALS['CONNECTOR'][$connectorName])) {
-                    $connectorConfig = &$GLOBALS['CONNECTOR'][$connectorName];
-                    $urlFields = ['url', 'endpoint', 'URL', 'HOST'];
-                    
-                    foreach ($urlFields as $field) {
-                        if (isset($connectorConfig[$field])) {
-                            $originalURL = $connectorConfig[$field];
-                            $newURL = self::replaceLocalhostInURL($originalURL, $hostIP);
-                            if ($newURL !== $originalURL) {
-                                $connectorConfig[$field] = $newURL;
-                                error_log("Network: Replaced $connectorName.$field: $originalURL -> $newURL");
-                                $replacementCount++;
-                            }
-                        }
-                    }
-                }
+        try {
+            // Store WSL2 IP in database
+            if ($wslIP) {
+                $db->upsertRowOnConflict('conf_opts', array(
+                    'id' => 'network_wsl2_ip', 
+                    'value' => $wslIP
+                ), 'id');
+                error_log("Network: Stored WSL2 IP in database: $wslIP");
+            } else {
+                // Remove WSL2 IP if not detected
+                $db->delete("conf_opts", "id='network_wsl2_ip'");
+                error_log("Network: WSL2 IP not detected, removed from database");
             }
-        }
-        
-        // Replace in specific TTS configurations
-        if (isset($GLOBALS['TTS']) && is_array($GLOBALS['TTS'])) {
-            foreach ($windowsHostServices['TTS'] as $ttsName) {
-                if (isset($GLOBALS['TTS'][$ttsName]) && is_array($GLOBALS['TTS'][$ttsName])) {
-                    $ttsConfig = &$GLOBALS['TTS'][$ttsName];
-                    $urlFields = ['url', 'endpoint', 'URL'];
-                    
-                    foreach ($urlFields as $field) {
-                        if (isset($ttsConfig[$field])) {
-                            $originalURL = $ttsConfig[$field];
-                            $newURL = self::replaceLocalhostInURL($originalURL, $hostIP);
-                            if ($newURL !== $originalURL) {
-                                $ttsConfig[$field] = $newURL;
-                                error_log("Network: Replaced TTS.$ttsName.$field: $originalURL -> $newURL");
-                                $replacementCount++;
-                            }
-                        }
-                    }
-                }
+            
+            // Store Host IP in database
+            if ($hostIP) {
+                $db->upsertRowOnConflict('conf_opts', array(
+                    'id' => 'network_host_ip', 
+                    'value' => $hostIP
+                ), 'id');
+                error_log("Network: Stored Host IP in database: $hostIP");
+            } else {
+                // Remove Host IP if not detected
+                $db->delete("conf_opts", "id='network_host_ip'");
+                error_log("Network: Host IP not detected, removed from database");
             }
+            
+            // Store detection timestamp
+            $db->upsertRowOnConflict('conf_opts', array(
+                'id' => 'network_detection_timestamp', 
+                'value' => time()
+            ), 'id');
+            
+        } catch (Exception $e) {
+            error_log("Network Detection: Database error - " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get stored WSL2 IP from database
+     * @return string|null The WSL2 IP or null if not found
+     */
+    public static function getStoredWSL2IP() {
+        if (!isset($GLOBALS['db'])) {
+            return null;
         }
         
-        // Replace in specific STT configurations (if any Windows-based ones are added)
-        if (isset($GLOBALS['STT']) && is_array($GLOBALS['STT'])) {
-            foreach ($windowsHostServices['STT'] as $sttName) {
-                if (isset($GLOBALS['STT'][$sttName]) && is_array($GLOBALS['STT'][$sttName])) {
-                    $sttConfig = &$GLOBALS['STT'][$sttName];
-                    $urlFields = ['url', 'endpoint', 'URL'];
-                    
-                    foreach ($urlFields as $field) {
-                        if (isset($sttConfig[$field])) {
-                            $originalURL = $sttConfig[$field];
-                            $newURL = self::replaceLocalhostInURL($originalURL, $hostIP);
-                            if ($newURL !== $originalURL) {
-                                $sttConfig[$field] = $newURL;
-                                error_log("Network: Replaced STT.$sttName.$field: $originalURL -> $newURL");
-                                $replacementCount++;
-                            }
-                        }
-                    }
-                }
-            }
+        $result = $GLOBALS['db']->fetchOne("SELECT value FROM conf_opts WHERE id='network_wsl2_ip'");
+        return $result ?: null;
+    }
+    
+    /**
+     * Get stored Host IP from database
+     * @return string|null The Host IP or null if not found
+     */
+    public static function getStoredHostIP() {
+        if (!isset($GLOBALS['db'])) {
+            return null;
         }
         
-        if ($replacementCount > 0) {
-            error_log("Network: Completed $replacementCount Windows host service replacements using IP: $hostIP");
-            error_log("Network: WSL2 services (KoboldCPP, MeloTTS, etc.) remain on localhost as intended");
-        } else {
-            error_log("Network: No Windows host services found to replace");
+        $result = $GLOBALS['db']->fetchOne("SELECT value FROM conf_opts WHERE id='network_host_ip'");
+        return $result ?: null;
+    }
+    
+    /**
+     * Get detection timestamp from database
+     * @return int|null The timestamp or null if not found
+     */
+    public static function getDetectionTimestamp() {
+        if (!isset($GLOBALS['db'])) {
+            return null;
         }
+        
+        $result = $GLOBALS['db']->fetchOne("SELECT value FROM conf_opts WHERE id='network_detection_timestamp'");
+        return $result ? (int)$result : null;
     }
 }
 

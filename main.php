@@ -18,12 +18,6 @@ $COOLDOWNMAP=[];
 
 $path = dirname((__FILE__)) . DIRECTORY_SEPARATOR;
 require($path . "conf".DIRECTORY_SEPARATOR."conf.php");
-
-// Include network hook for dynamic IP replacement after configuration loading
-if (file_exists($path . "conf".DIRECTORY_SEPARATOR."conf_network_hook.php")) {
-    require_once($path . "conf".DIRECTORY_SEPARATOR."conf_network_hook.php");
-}
-
 require_once($path . "lib" .DIRECTORY_SEPARATOR."auditing.php");
 require_once($path . "lib" .DIRECTORY_SEPARATOR."model_dynmodel.php");
 require_once($path . "lib" .DIRECTORY_SEPARATOR."{$GLOBALS["DBDRIVER"]}.class.php");
@@ -122,6 +116,12 @@ $gameRequest[0] = strtolower($gameRequest[0]); // Who put 'diary' uppercase?
 
 // Database Connection
 $db = new sql();
+$GLOBALS["db"] = $db;
+
+// Include network hook for IP detection after database is available
+if (file_exists($path . "conf".DIRECTORY_SEPARATOR."conf_network_hook.php")) {
+    require_once($path . "conf".DIRECTORY_SEPARATOR."conf_network_hook.php");
+}
 
 require_once($path . "processor" .DIRECTORY_SEPARATOR."chim_modes.php");
 
